@@ -891,6 +891,13 @@ impl BottomPane {
             .and_then(|view| view.active_tab_id())
     }
 
+    pub(crate) fn active_view_has_search_query(&self, view_id: &'static str) -> bool {
+        self.view_stack
+            .last()
+            .filter(|view| view.view_id() == Some(view_id))
+            .is_some_and(|view| view.has_active_search_query())
+    }
+
     /// Update the pending-input preview shown above the composer.
     pub(crate) fn set_pending_input_preview(
         &mut self,

@@ -574,6 +574,13 @@ impl ChatWidget {
             return false;
         }
 
+        if self
+            .bottom_pane
+            .active_view_has_search_query(PLUGINS_SELECTION_VIEW_ID)
+        {
+            return false;
+        }
+
         let Some(active_tab_id) = self
             .bottom_pane
             .active_tab_id_for_active_view(PLUGINS_SELECTION_VIEW_ID)

@@ -55,6 +55,11 @@ pub(crate) trait BottomPaneView: Renderable {
         None
     }
 
+    /// Return true when this view has a non-empty search query.
+    fn has_active_search_query(&self) -> bool {
+        false
+    }
+
     /// Handle Ctrl-C while this view is active.
     fn on_ctrl_c(&mut self) -> CancellationEvent {
         CancellationEvent::NotHandled

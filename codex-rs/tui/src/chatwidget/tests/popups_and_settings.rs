@@ -752,6 +752,54 @@ async fn plugins_popup_space_with_active_search_does_not_toggle_installed_plugin
 }
 
 #[tokio::test]
+async fn plugins_popup_r_with_active_search_filters_removable_marketplace() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.set_feature_enabled(Feature::Plugins, /*enabled*/ true);
+    let temp = tempdir().expect("tempdir");
+    let config_toml_path = temp.path().join("config.toml").abs();
+    chat.config.config_layer_stack = ConfigLayerStack::default().with_user_config(
+        &config_toml_path,
+        toml::from_str::<TomlValue>(
+            "[marketplaces.repo]\nsource_type = \"git\"\nsource = \"https://github.com/owner/repo.git\"\n",
+        )
+        .expect("marketplace config"),
+    );
+
+    render_loaded_plugins_popup(
+        &mut chat,
+        plugins_test_response(vec![
+            plugins_test_curated_marketplace(Vec::new()),
+            plugins_test_repo_marketplace(vec![plugins_test_summary(
+                "plugin-drive",
+                "drive",
+                Some("Drive"),
+                Some("Document access."),
+                /*installed*/ false,
+                /*enabled*/ true,
+                PluginInstallPolicy::Available,
+            )]),
+        ]),
+    );
+
+    for _ in 0..3 {
+        chat.handle_key_event(KeyEvent::from(KeyCode::Right));
+    }
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Char('d')));
+    chat.handle_key_event(KeyEvent::from(KeyCode::Char('r')));
+
+    let popup = render_bottom_popup(&chat, /*width*/ 100);
+    assert!(
+        popup.contains("dr") && popup.contains("Drive"),
+        "expected r to extend the active plugin search, got:\n{popup}"
+    );
+    assert!(
+        !popup.contains("Remove Repo Marketplace marketplace?"),
+        "did not expect r to open marketplace removal while search is active, got:\n{popup}"
+    );
+}
+
+#[tokio::test]
 async fn plugins_popup_search_filters_visible_rows_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.set_feature_enabled(Feature::Plugins, /*enabled*/ true);

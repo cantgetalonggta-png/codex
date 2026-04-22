@@ -958,6 +958,10 @@ impl BottomPaneView for ListSelectionView {
         ListSelectionView::active_tab_id(self)
     }
 
+    fn has_active_search_query(&self) -> bool {
+        self.is_searchable && !self.search_query.is_empty()
+    }
+
     fn on_ctrl_c(&mut self) -> CancellationEvent {
         if let Some(cb) = &self.on_cancel {
             cb(&self.app_event_tx);
