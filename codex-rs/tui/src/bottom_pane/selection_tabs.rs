@@ -15,6 +15,7 @@ pub(crate) struct SelectionTab {
     pub(crate) id: String,
     pub(crate) label: String,
     pub(crate) header: Box<dyn Renderable>,
+    pub(crate) footer_hint: Option<Line<'static>>,
     pub(crate) items: Vec<SelectionItem>,
 }
 

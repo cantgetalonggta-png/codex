@@ -369,6 +369,13 @@ impl ListSelectionView {
             .unwrap_or(self.header.as_ref())
     }
 
+    fn active_footer_hint(&self) -> Option<&Line<'static>> {
+        self.active_tab_idx
+            .and_then(|idx| self.tabs.get(idx))
+            .and_then(|tab| tab.footer_hint.as_ref())
+            .or(self.footer_hint.as_ref())
+    }
+
     fn active_tab_id(&self) -> Option<&str> {
         self.active_tab_idx
             .and_then(|idx| self.tabs.get(idx))
@@ -1013,7 +1020,7 @@ impl Renderable for ListSelectionView {
             let note_lines = wrap_styled_line(note, note_width);
             height = height.saturating_add(note_lines.len() as u16);
         }
-        if self.footer_hint.is_some() {
+        if self.active_footer_hint().is_some() {
             height = height.saturating_add(1);
         }
         height
@@ -1030,7 +1037,7 @@ impl Renderable for ListSelectionView {
             .as_ref()
             .map(|note| wrap_styled_line(note, note_width));
         let note_height = note_lines.as_ref().map_or(0, |lines| lines.len() as u16);
-        let footer_rows = note_height + u16::from(self.footer_hint.is_some());
+        let footer_rows = note_height + u16::from(self.active_footer_hint().is_some());
         let [content_area, footer_area] =
             Layout::vertical([Constraint::Fill(1), Constraint::Length(footer_rows)]).areas(area);
 
@@ -1208,7 +1215,11 @@ impl Renderable for ListSelectionView {
         if footer_area.height > 0 {
             let [note_area, hint_area] = Layout::vertical([
                 Constraint::Length(note_height),
-                Constraint::Length(if self.footer_hint.is_some() { 1 } else { 0 }),
+                Constraint::Length(if self.active_footer_hint().is_some() {
+                    1
+                } else {
+                    0
+                }),
             ])
             .areas(footer_area);
 
@@ -1233,7 +1244,7 @@ impl Renderable for ListSelectionView {
                 }
             }
 
-            if let Some(hint) = &self.footer_hint {
+            if let Some(hint) = self.active_footer_hint() {
                 let hint_area = Rect {
                     x: hint_area.x + 2,
                     y: hint_area.y,
@@ -1575,6 +1586,7 @@ mod tests {
                         id: "alpha".to_string(),
                         label: "Alpha".to_string(),
                         header: Box::new(()),
+                        footer_hint: None,
                         items: vec![SelectionItem {
                             name: "Alpha Item".to_string(),
                             dismiss_on_select: true,
@@ -1585,6 +1597,7 @@ mod tests {
                         id: "beta".to_string(),
                         label: "Beta".to_string(),
                         header: Box::new(()),
+                        footer_hint: None,
                         items: vec![SelectionItem {
                             name: "Beta Item".to_string(),
                             dismiss_on_select: true,
@@ -1622,6 +1635,7 @@ mod tests {
                         id: "alpha".to_string(),
                         label: "Alpha".to_string(),
                         header: Box::new(()),
+                        footer_hint: None,
                         items: vec![
                             SelectionItem {
                                 name: "Alpha First".to_string(),
@@ -1640,6 +1654,7 @@ mod tests {
                         id: "beta".to_string(),
                         label: "Beta".to_string(),
                         header: Box::new(()),
+                        footer_hint: None,
                         items: vec![
                             SelectionItem {
                                 name: "Beta First".to_string(),

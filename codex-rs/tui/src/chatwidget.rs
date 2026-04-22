@@ -5815,6 +5815,10 @@ impl ChatWidget {
             return;
         }
 
+        if self.handle_plugins_popup_key_event(key_event) {
+            return;
+        }
+
         match key_event {
             KeyEvent {
                 code: KeyCode::BackTab,
