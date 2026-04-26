@@ -68,7 +68,7 @@ impl AgentIdentityAuthRecord {
             account_id: claims.account_id,
             chatgpt_user_id: claims.chatgpt_user_id,
             email: claims.email,
-            plan_type: claims.plan_type,
+            plan_type: claims.plan_type.into(),
             chatgpt_account_is_fedramp: claims.chatgpt_account_is_fedramp,
         })
     }

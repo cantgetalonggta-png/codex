@@ -8,7 +8,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::SecondsFormat;
 use chrono::Utc;
-use codex_protocol::account::PlanType as AccountPlanType;
+use codex_protocol::auth::PlanType as AuthPlanType;
 use codex_protocol::protocol::SessionSource;
 use crypto_box::SecretKey as Curve25519SecretKey;
 use ed25519_dalek::Signer as _;
@@ -63,7 +63,7 @@ pub struct AgentIdentityJwtClaims {
     pub account_id: String,
     pub chatgpt_user_id: String,
     pub email: String,
-    pub plan_type: AccountPlanType,
+    pub plan_type: AuthPlanType,
     pub chatgpt_account_is_fedramp: bool,
 }
 
@@ -389,6 +389,8 @@ mod tests {
     use jsonwebtoken::Header;
     use pretty_assertions::assert_eq;
 
+    use codex_protocol::auth::KnownPlan;
+
     use super::*;
 
     #[test]
@@ -491,10 +493,28 @@ mod tests {
                 account_id: "account-id".to_string(),
                 chatgpt_user_id: "user-id".to_string(),
                 email: "user@example.com".to_string(),
-                plan_type: AccountPlanType::Pro,
+                plan_type: AuthPlanType::Known(KnownPlan::Pro),
                 chatgpt_account_is_fedramp: false,
             }
         );
+    }
+
+    #[test]
+    fn decode_agent_identity_jwt_maps_raw_plan_aliases() {
+        let jwt = jwt_with_payload(serde_json::json!({
+            "agent_runtime_id": "agent-runtime-id",
+            "agent_private_key": "private-key",
+            "account_id": "account-id",
+            "chatgpt_user_id": "user-id",
+            "email": "user@example.com",
+            "plan_type": "hc",
+            "chatgpt_account_is_fedramp": false,
+        }));
+
+        let claims =
+            decode_agent_identity_jwt(&jwt, /*public_key_base64*/ None).expect("JWT should decode");
+
+        assert_eq!(claims.plan_type, AuthPlanType::Known(KnownPlan::Enterprise));
     }
 
     #[test]
@@ -512,7 +532,7 @@ mod tests {
             account_id: "account-id".to_string(),
             chatgpt_user_id: "user-id".to_string(),
             email: "user@example.com".to_string(),
-            plan_type: AccountPlanType::Pro,
+            plan_type: AuthPlanType::Known(KnownPlan::Pro),
             chatgpt_account_is_fedramp: false,
         };
         let jwt = jsonwebtoken::encode(
@@ -536,7 +556,7 @@ mod tests {
             account_id: "account-id".to_string(),
             chatgpt_user_id: "user-id".to_string(),
             email: "user@example.com".to_string(),
-            plan_type: AccountPlanType::Pro,
+            plan_type: AuthPlanType::Known(KnownPlan::Pro),
             chatgpt_account_is_fedramp: false,
         };
         assert_eq!(

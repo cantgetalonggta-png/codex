@@ -817,6 +817,13 @@ fn agent_identity_record(account_id: &str) -> AgentIdentityAuthRecord {
 }
 
 fn fake_agent_identity_jwt(record: &AgentIdentityAuthRecord) -> std::io::Result<String> {
+    fake_agent_identity_jwt_with_plan_type(record, serde_json::to_value(record.plan_type)?)
+}
+
+fn fake_agent_identity_jwt_with_plan_type(
+    record: &AgentIdentityAuthRecord,
+    plan_type: serde_json::Value,
+) -> std::io::Result<String> {
     let encode = |bytes: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
     let header_b64 = encode(br#"{"alg":"EdDSA","typ":"JWT"}"#);
     let payload = json!({
@@ -825,12 +832,32 @@ fn fake_agent_identity_jwt(record: &AgentIdentityAuthRecord) -> std::io::Result<
         "account_id": record.account_id,
         "chatgpt_user_id": record.chatgpt_user_id,
         "email": record.email,
-        "plan_type": record.plan_type,
+        "plan_type": plan_type,
         "chatgpt_account_is_fedramp": record.chatgpt_account_is_fedramp,
     });
     let payload_b64 = encode(&serde_json::to_vec(&payload)?);
     let signature_b64 = encode(b"sig");
     Ok(format!("{header_b64}.{payload_b64}.{signature_b64}"))
+}
+
+#[test]
+fn agent_identity_plan_type_maps_raw_enterprise_alias() {
+    let record = agent_identity_record("account-id");
+    let jwt =
+        fake_agent_identity_jwt_with_plan_type(&record, json!("hc")).expect("agent identity jwt");
+    let auth = CodexAuth::from_agent_identity_jwt(&jwt).expect("agent identity auth");
+
+    pretty_assertions::assert_eq!(auth.account_plan_type(), Some(AccountPlanType::Enterprise));
+}
+
+#[test]
+fn agent_identity_plan_type_maps_raw_education_alias() {
+    let record = agent_identity_record("account-id");
+    let jwt = fake_agent_identity_jwt_with_plan_type(&record, json!("education"))
+        .expect("agent identity jwt");
+    let auth = CodexAuth::from_agent_identity_jwt(&jwt).expect("agent identity auth");
+
+    pretty_assertions::assert_eq!(auth.account_plan_type(), Some(AccountPlanType::Edu));
 }
 
 #[tokio::test]
