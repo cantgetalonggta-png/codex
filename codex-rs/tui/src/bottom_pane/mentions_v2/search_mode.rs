@@ -47,22 +47,3 @@ impl SearchMode {
         }
     }
 }
-
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct SearchModeSettings {
-    favorite_search_mode: Option<SearchMode>,
-}
-
-impl SearchModeSettings {
-    pub(super) fn favorite_search_mode(self) -> SearchMode {
-        self.favorite_search_mode.unwrap_or(SearchMode::Results)
-    }
-
-    pub(super) fn toggle_favorite_search_mode(&mut self, search_mode: SearchMode) {
-        if self.favorite_search_mode == Some(search_mode) {
-            self.favorite_search_mode = None;
-        } else {
-            self.favorite_search_mode = Some(search_mode);
-        }
-    }
-}

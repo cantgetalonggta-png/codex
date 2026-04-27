@@ -48,9 +48,7 @@ fn footer_hint_line() -> Line<'static> {
         key_hint::plain(KeyCode::Left).into(),
         "/".dim(),
         key_hint::plain(KeyCode::Right).into(),
-        " switch search modes · ".dim(),
-        key_hint::alt(KeyCode::Char('f')).into(),
-        " to remember search mode".dim(),
+        " switch search modes".dim(),
     ])
 }
 

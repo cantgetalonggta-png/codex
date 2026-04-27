@@ -178,7 +178,6 @@ use super::footer::single_line_footer_layout;
 use super::footer::toggle_shortcut_mode;
 use super::footer::uses_passive_footer_status_layout;
 use super::mentions_v2::MentionV2Popup;
-use super::mentions_v2::MentionV2SearchModeSettings;
 use super::mentions_v2::MentionV2Selection;
 use super::paste_burst::CharDecision;
 use super::paste_burst::PasteBurst;
@@ -380,7 +379,6 @@ pub(crate) struct ChatComposer {
     connectors_enabled: bool,
     plugins_command_enabled: bool,
     mentions_v2_enabled: bool,
-    mentions_v2_search_mode_settings: MentionV2SearchModeSettings,
     fast_command_enabled: bool,
     goal_command_enabled: bool,
     personality_command_enabled: bool,
@@ -540,7 +538,6 @@ impl ChatComposer {
             connectors_enabled: false,
             plugins_command_enabled: false,
             mentions_v2_enabled: false,
-            mentions_v2_search_mode_settings: MentionV2SearchModeSettings::default(),
             fast_command_enabled: false,
             goal_command_enabled: false,
             personality_command_enabled: false,
@@ -1973,15 +1970,6 @@ impl ChatComposer {
                 ..
             } => {
                 popup.next_search_mode();
-                (InputResult::None, true)
-            }
-            KeyEvent {
-                code: KeyCode::Char('f'),
-                modifiers: KeyModifiers::ALT,
-                ..
-            } => {
-                popup.remember_search_mode(&mut self.mentions_v2_search_mode_settings);
-                popup.sync_search_mode_settings(self.mentions_v2_search_mode_settings);
                 (InputResult::None, true)
             }
             KeyEvent {
@@ -3814,8 +3802,7 @@ impl ChatComposer {
                 popup.set_candidates(candidates);
             }
             _ => {
-                let mut popup =
-                    MentionV2Popup::new(candidates, self.mentions_v2_search_mode_settings);
+                let mut popup = MentionV2Popup::new(candidates);
                 popup.set_query(&query);
                 self.active_popup = ActivePopup::MentionV2(popup);
             }

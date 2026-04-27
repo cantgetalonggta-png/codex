@@ -98,14 +98,21 @@ fn render_rows(
     }
 
     let mut cur_y = area.y;
+    let file_name_column_width = rows
+        .iter()
+        .skip(start_idx)
+        .take(visible_items)
+        .filter_map(file_name)
+        .map(|file_name| file_name.chars().count())
+        .max()
+        .unwrap_or(0);
     for (idx, row) in rows.iter().enumerate().skip(start_idx).take(visible_items) {
         if cur_y >= area.y + area.height {
             break;
         }
 
         let selected = Some(idx) == state.selected_idx;
-        let line =
-            truncate_line_with_ellipsis_if_overflow(build_line(row, selected), area.width as usize);
+        let line = build_line(row, selected, area.width as usize, file_name_column_width);
         line.render(
             Rect {
                 x: area.x,
@@ -119,7 +126,12 @@ fn render_rows(
     }
 }
 
-fn build_line(row: &SearchResult, selected: bool) -> Line<'static> {
+fn build_line(
+    row: &SearchResult,
+    selected: bool,
+    width: usize,
+    file_name_column_width: usize,
+) -> Line<'static> {
     let base_style = if selected {
         Style::default().bold()
     } else {
@@ -130,9 +142,37 @@ fn build_line(row: &SearchResult, selected: bool) -> Line<'static> {
     } else {
         Style::default().dim()
     };
+    let tag = row.mention_type.span(base_style);
+    let tag_width = tag.width();
+    let content_width = width.saturating_sub(tag_width.saturating_add(2));
+    let content = truncate_line_with_ellipsis_if_overflow(
+        content_line(row, base_style, dim_style, file_name_column_width),
+        content_width,
+    );
+    let rendered_content_width = content.width();
     let mut spans = Vec::new();
-    spans.push(row.mention_type.span(base_style));
-    spans.push("  ".set_style(dim_style));
+    spans.extend(content.spans);
+    let padding = width.saturating_sub(rendered_content_width.saturating_add(tag_width));
+    if padding > 0 {
+        spans.push(" ".repeat(padding).set_style(dim_style));
+    }
+    spans.push(tag);
+
+    Line::from(spans)
+}
+
+fn content_line(
+    row: &SearchResult,
+    base_style: Style,
+    dim_style: Style,
+    file_name_column_width: usize,
+) -> Line<'static> {
+    let mut spans = Vec::new();
+    if let Some(file_name) = file_name(row) {
+        spans.push(file_name.to_string().set_style(base_style.fg(Color::Cyan)));
+        let padding = file_name_column_width.saturating_sub(file_name.chars().count()) + 2;
+        spans.push(" ".repeat(padding).set_style(dim_style));
+    }
     spans.extend(name_spans(row, base_style));
     if let Some(description) = row
         .description
@@ -149,13 +189,11 @@ fn build_line(row: &SearchResult, selected: bool) -> Line<'static> {
 fn name_spans(row: &SearchResult, base_style: Style) -> Vec<Span<'static>> {
     let mut spans = Vec::with_capacity(row.display_name.len());
     let file_name_start = file_name_start(row);
+    let path_style = base_style.dark_gray();
     if let Some(indices) = row.match_indices.as_ref() {
         let mut idx_iter = indices.iter().peekable();
         for (char_idx, ch) in row.display_name.chars().enumerate() {
-            let mut style = base_style;
-            if char_idx >= file_name_start {
-                style = style.fg(Color::Cyan);
-            }
+            let mut style = path_style;
             if idx_iter.peek().is_some_and(|next| **next == char_idx) {
                 idx_iter.next();
                 style = style.bold();
@@ -163,11 +201,7 @@ fn name_spans(row: &SearchResult, base_style: Style) -> Vec<Span<'static>> {
             spans.push(ch.to_string().set_style(style));
         }
     } else if file_name_start == 0 {
-        spans.push(
-            row.display_name
-                .clone()
-                .set_style(base_style.fg(Color::Cyan)),
-        );
+        spans.push(row.display_name.clone().set_style(path_style));
     } else if file_name_start != usize::MAX {
         let byte_start = row
             .display_name
@@ -178,17 +212,30 @@ fn name_spans(row: &SearchResult, base_style: Style) -> Vec<Span<'static>> {
         spans.push(
             row.display_name[..byte_start]
                 .to_string()
-                .set_style(base_style),
-        );
-        spans.push(
-            row.display_name[byte_start..]
-                .to_string()
-                .set_style(base_style.fg(Color::Cyan)),
+                .set_style(path_style),
         );
     } else {
         spans.push(row.display_name.clone().set_style(base_style));
     }
     spans
+}
+
+fn file_name(row: &SearchResult) -> Option<&str> {
+    let file_name_start = file_name_start(row);
+    if file_name_start == usize::MAX {
+        return None;
+    }
+    if file_name_start == 0 {
+        return Some(&row.display_name);
+    }
+
+    let byte_start = row
+        .display_name
+        .char_indices()
+        .nth(file_name_start)
+        .map(|(idx, _)| idx)
+        .unwrap_or(row.display_name.len());
+    Some(&row.display_name[byte_start..])
 }
 
 fn file_name_start(row: &SearchResult) -> usize {

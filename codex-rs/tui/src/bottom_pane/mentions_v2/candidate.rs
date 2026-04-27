@@ -5,7 +5,7 @@ use ratatui::style::Styled;
 use ratatui::style::Stylize;
 use ratatui::text::Span;
 
-const TAG_WIDTH: usize = "[Plugin]".len();
+const TAG_WIDTH: usize = "Plugin".len();
 
 #[derive(Clone, Debug)]
 pub(crate) enum Selection {
@@ -42,11 +42,11 @@ impl MentionType {
 
     fn label(self) -> &'static str {
         match self {
-            Self::Plugin => "[Plugin]",
-            Self::App => "[App]",
-            Self::Skill => "[Skill]",
-            Self::File => "[File]",
-            Self::Directory => "[Dir]",
+            Self::Plugin => "Plugin",
+            Self::App => "App",
+            Self::Skill => "Skill",
+            Self::File => "File",
+            Self::Directory => "Dir",
         }
     }
 }

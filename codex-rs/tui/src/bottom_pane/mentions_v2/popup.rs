@@ -9,7 +9,6 @@ use super::candidate::Selection;
 use super::filter::filtered_candidates;
 use super::render::render_popup;
 use super::search_mode::SearchMode;
-use super::search_mode::SearchModeSettings;
 use crate::bottom_pane::popup_consts::MAX_POPUP_ROWS;
 use crate::bottom_pane::scroll_state::ScrollState;
 
@@ -18,21 +17,16 @@ pub(crate) struct Popup {
     file_search: FileSearch,
     candidates: Vec<Candidate>,
     search_mode: SearchMode,
-    search_mode_settings: SearchModeSettings,
     state: ScrollState,
 }
 
 impl Popup {
-    pub(crate) fn new(
-        candidates: Vec<Candidate>,
-        search_mode_settings: SearchModeSettings,
-    ) -> Self {
+    pub(crate) fn new(candidates: Vec<Candidate>) -> Self {
         Self {
             query: String::new(),
             file_search: FileSearch::default(),
             candidates,
-            search_mode: search_mode_settings.favorite_search_mode(),
-            search_mode_settings,
+            search_mode: SearchMode::Results,
             state: ScrollState::new(),
         }
     }
@@ -79,14 +73,6 @@ impl Popup {
     pub(crate) fn next_search_mode(&mut self) {
         self.search_mode = self.search_mode.next();
         self.clamp_selection();
-    }
-
-    pub(crate) fn remember_search_mode(&self, search_mode_settings: &mut SearchModeSettings) {
-        search_mode_settings.toggle_favorite_search_mode(self.search_mode);
-    }
-
-    pub(crate) fn sync_search_mode_settings(&mut self, search_mode_settings: SearchModeSettings) {
-        self.search_mode_settings = search_mode_settings;
     }
 
     pub(crate) fn calculate_required_height(&self, _width: u16) -> u16 {
