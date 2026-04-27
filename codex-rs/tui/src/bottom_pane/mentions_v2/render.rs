@@ -98,12 +98,11 @@ fn render_rows(
     }
 
     let mut cur_y = area.y;
-    let file_name_column_width = rows
+    let primary_column_width = rows
         .iter()
         .skip(start_idx)
         .take(visible_items)
-        .filter_map(file_name)
-        .map(|file_name| file_name.chars().count())
+        .map(primary_text_width)
         .max()
         .unwrap_or(0);
     for (idx, row) in rows.iter().enumerate().skip(start_idx).take(visible_items) {
@@ -112,7 +111,7 @@ fn render_rows(
         }
 
         let selected = Some(idx) == state.selected_idx;
-        let line = build_line(row, selected, area.width as usize, file_name_column_width);
+        let line = build_line(row, selected, area.width as usize, primary_column_width);
         line.render(
             Rect {
                 x: area.x,
@@ -130,7 +129,7 @@ fn build_line(
     row: &SearchResult,
     selected: bool,
     width: usize,
-    file_name_column_width: usize,
+    primary_column_width: usize,
 ) -> Line<'static> {
     let base_style = if selected {
         Style::default().bold()
@@ -146,7 +145,7 @@ fn build_line(
     let tag_width = tag.width();
     let content_width = width.saturating_sub(tag_width.saturating_add(2));
     let content = truncate_line_with_ellipsis_if_overflow(
-        content_line(row, base_style, dim_style, file_name_column_width),
+        content_line(row, base_style, dim_style, primary_column_width),
         content_width,
     );
     let rendered_content_width = content.width();
@@ -165,34 +164,87 @@ fn content_line(
     row: &SearchResult,
     base_style: Style,
     dim_style: Style,
-    file_name_column_width: usize,
+    primary_column_width: usize,
 ) -> Line<'static> {
     let mut spans = Vec::new();
-    if let Some(file_name) = file_name(row) {
-        spans.push(file_name.to_string().set_style(base_style.fg(Color::Cyan)));
-        let padding = file_name_column_width.saturating_sub(file_name.chars().count()) + 2;
+    spans.extend(primary_spans(row, base_style));
+    if let Some(secondary) = secondary_line(row, base_style, dim_style) {
+        let padding = primary_column_width
+            .saturating_sub(primary_text_width(row))
+            .saturating_add(2);
         spans.push(" ".repeat(padding).set_style(dim_style));
-    }
-    spans.extend(name_spans(row, base_style));
-    if let Some(description) = row
-        .description
-        .as_deref()
-        .filter(|description| !description.is_empty())
-    {
-        spans.push("  ".set_style(dim_style));
-        spans.push(description.to_string().set_style(dim_style));
+        spans.extend(secondary.spans);
     }
 
     Line::from(spans)
 }
 
-fn name_spans(row: &SearchResult, base_style: Style) -> Vec<Span<'static>> {
+fn primary_spans(row: &SearchResult, base_style: Style) -> Vec<Span<'static>> {
+    if let Some(file_name) = file_name(row) {
+        let style = if row.mention_type == MentionType::File {
+            base_style.fg(Color::Cyan)
+        } else {
+            base_style
+        };
+        return vec![file_name.to_string().set_style(style)];
+    }
+
     let mut spans = Vec::with_capacity(row.display_name.len());
-    let file_name_start = file_name_start(row);
-    let path_style = base_style.dark_gray();
+    let name_style = match row.mention_type {
+        MentionType::Plugin | MentionType::App => base_style.magenta(),
+        MentionType::Skill => base_style.dark_gray(),
+        MentionType::File | MentionType::Directory => base_style,
+    };
     if let Some(indices) = row.match_indices.as_ref() {
         let mut idx_iter = indices.iter().peekable();
         for (char_idx, ch) in row.display_name.chars().enumerate() {
+            let mut style = name_style;
+            if idx_iter.peek().is_some_and(|next| **next == char_idx) {
+                idx_iter.next();
+                style = style.bold();
+            }
+            spans.push(ch.to_string().set_style(style));
+        }
+    } else {
+        spans.push(row.display_name.clone().set_style(name_style));
+    }
+
+    spans
+}
+
+fn secondary_line(
+    row: &SearchResult,
+    base_style: Style,
+    dim_style: Style,
+) -> Option<Line<'static>> {
+    if file_name(row).is_some() {
+        let mut spans = path_spans(row, base_style);
+        if let Some(description) = row
+            .description
+            .as_deref()
+            .filter(|description| !description.is_empty())
+        {
+            spans.push("  ".set_style(dim_style));
+            spans.push(description.to_string().set_style(dim_style));
+        }
+        return Some(Line::from(spans));
+    }
+
+    row.description
+        .as_deref()
+        .filter(|description| !description.is_empty())
+        .map(|description| Line::from(description.to_string().set_style(dim_style)))
+}
+
+fn path_spans(row: &SearchResult, base_style: Style) -> Vec<Span<'static>> {
+    let mut spans = Vec::with_capacity(row.display_name.len());
+    let file_name_start = file_name_start(row);
+    let path_style = base_style.dark_gray();
+    if file_name_start == 0 {
+        spans.push("./".set_style(path_style));
+    } else if let Some(indices) = row.match_indices.as_ref() {
+        let mut idx_iter = indices.iter().peekable();
+        for (char_idx, ch) in row.display_name.chars().enumerate().take(file_name_start) {
             let mut style = path_style;
             if idx_iter.peek().is_some_and(|next| **next == char_idx) {
                 idx_iter.next();
@@ -200,8 +252,6 @@ fn name_spans(row: &SearchResult, base_style: Style) -> Vec<Span<'static>> {
             }
             spans.push(ch.to_string().set_style(style));
         }
-    } else if file_name_start == 0 {
-        spans.push(row.display_name.clone().set_style(path_style));
     } else if file_name_start != usize::MAX {
         let byte_start = row
             .display_name
@@ -218,6 +268,12 @@ fn name_spans(row: &SearchResult, base_style: Style) -> Vec<Span<'static>> {
         spans.push(row.display_name.clone().set_style(base_style));
     }
     spans
+}
+
+fn primary_text_width(row: &SearchResult) -> usize {
+    file_name(row)
+        .map(|file_name| file_name.chars().count())
+        .unwrap_or_else(|| row.display_name.chars().count())
 }
 
 fn file_name(row: &SearchResult) -> Option<&str> {
@@ -240,7 +296,7 @@ fn file_name(row: &SearchResult) -> Option<&str> {
 
 fn file_name_start(row: &SearchResult) -> usize {
     match row.selection {
-        Selection::File(_) if row.mention_type == MentionType::File => row
+        Selection::File(_) if row.mention_type.is_filesystem() => row
             .display_name
             .rfind(['/', '\\'])
             .map(|idx| row.display_name[..idx + 1].chars().count())
