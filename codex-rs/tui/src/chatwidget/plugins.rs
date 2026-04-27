@@ -1369,6 +1369,8 @@ impl ChatWidget {
                 .filter(|(_, plugin, _)| plugin.installed)
                 .count();
             let tab_id = marketplace_tab_id(marketplace);
+            let removable_marketplace =
+                marketplace_is_user_configured(&self.config, &marketplace.name);
             let header = if self.newly_installed_marketplace_tab_id.as_deref() == Some(&tab_id) {
                 plugins_header(
                     format!("{label} installed successfully."),
@@ -1377,8 +1379,6 @@ impl ChatWidget {
                 )
             } else {
                 plugins_header(
-            let removable_marketplace =
-                marketplace_is_user_configured(&self.config, &marketplace.name);
                     format!("{label}."),
                     format!(
                         "Installed {marketplace_installed} of {marketplace_total} {label} plugins."
