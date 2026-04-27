@@ -1362,10 +1362,10 @@ impl AuthManager {
         })
     }
 
-    /// Current cached auth (clone). May be `None` if not logged in or load failed.
+    /// Current auth snapshot (clone). May be `None` if not logged in or load failed.
     /// For stale managed ChatGPT auth, first performs a guarded reload and then
     /// refreshes only if the on-disk auth is unchanged.
-    pub async fn auth(&self) -> Option<CodexAuth> {
+    pub async fn auth_snapshot(&self) -> Option<CodexAuth> {
         if let Some(auth) = self.resolve_external_api_key_auth().await {
             return Some(auth);
         }
@@ -1377,7 +1377,12 @@ impl AuthManager {
             tracing::error!("Failed to refresh token: {}", err);
             return Some(auth);
         }
-        let auth = self.auth_cached()?;
+        self.auth_cached()
+    }
+
+    /// Current auth initialized for backend requests.
+    pub async fn auth(&self) -> Option<CodexAuth> {
+        let auth = self.auth_snapshot().await?;
         if let Err(err) = auth.initialize_runtime().await {
             tracing::error!("Failed to initialize auth runtime: {err}");
             return None;

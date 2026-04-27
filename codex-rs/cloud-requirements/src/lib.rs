@@ -348,7 +348,7 @@ impl CloudRequirementsService {
     }
 
     async fn fetch(&self) -> Result<Option<ConfigRequirementsToml>, CloudRequirementsLoadError> {
-        let Some(auth) = self.auth_manager.auth().await else {
+        let Some(auth) = self.auth_manager.auth_snapshot().await else {
             return Ok(None);
         };
         if !cloud_requirements_eligible_auth(&auth) {
@@ -563,7 +563,7 @@ impl CloudRequirementsService {
     }
 
     async fn refresh_cache(&self) -> bool {
-        let Some(auth) = self.auth_manager.auth().await else {
+        let Some(auth) = self.auth_manager.auth_snapshot().await else {
             return false;
         };
         if !cloud_requirements_eligible_auth(&auth) {
@@ -1765,6 +1765,52 @@ enabled = false
         let fetcher = Arc::new(SequenceFetcher::new(vec![Err(request_error())]));
         let service = CloudRequirementsService::new(
             auth_manager_with_plan("business").await,
+            fetcher.clone(),
+            codex_home.path().to_path_buf(),
+            CLOUD_REQUIREMENTS_TIMEOUT,
+        );
+
+        assert_eq!(
+            service.fetch().await,
+            Ok(Some(ConfigRequirementsToml {
+                allowed_approval_policies: Some(vec![AskForApproval::Never]),
+                allowed_approvals_reviewers: None,
+                allowed_sandbox_modes: None,
+                remote_sandbox_config: None,
+                allowed_web_search_modes: None,
+                guardian_policy_config: None,
+                feature_requirements: None,
+                hooks: None,
+                mcp_servers: None,
+                apps: None,
+                rules: None,
+                enforce_residency: None,
+                network: None,
+                permissions: None,
+            }))
+        );
+        assert_eq!(fetcher.request_count.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn fetch_cloud_requirements_uses_cache_before_agent_identity_runtime_init() {
+        let codex_home = tempdir().expect("tempdir");
+        let prime_service = CloudRequirementsService::new(
+            auth_manager_with_plan("business"),
+            Arc::new(StaticFetcher {
+                contents: Some("allowed_approval_policies = [\"never\"]".to_string()),
+            }),
+            codex_home.path().to_path_buf(),
+            CLOUD_REQUIREMENTS_TIMEOUT,
+        );
+        let _ = prime_service.fetch().await;
+
+        let fetcher = Arc::new(SequenceFetcher::new(vec![Err(request_error())]));
+        let service = CloudRequirementsService::new(
+            AuthManager::from_auth_for_testing_with_home(
+                agent_identity_auth_with_plan(PlanType::Business),
+                codex_home.path().to_path_buf(),
+            ),
             fetcher.clone(),
             codex_home.path().to_path_buf(),
             CLOUD_REQUIREMENTS_TIMEOUT,
