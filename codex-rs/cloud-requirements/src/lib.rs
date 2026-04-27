@@ -1796,7 +1796,7 @@ enabled = false
     async fn fetch_cloud_requirements_uses_cache_before_agent_identity_runtime_init() {
         let codex_home = tempdir().expect("tempdir");
         let prime_service = CloudRequirementsService::new(
-            auth_manager_with_plan("business"),
+            auth_manager_with_plan("business").await,
             Arc::new(StaticFetcher {
                 contents: Some("allowed_approval_policies = [\"never\"]".to_string()),
             }),
