@@ -22,6 +22,9 @@ use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
+use tracing::Level;
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_test::internal::MockWriter;
 
 fn set_danger_full_access(turn: &mut crate::session::turn_context::TurnContext) {
     turn.sandbox_policy
@@ -166,6 +169,104 @@ fn js_repl_internal_tool_guard_matches_expected_names() {
     assert!(is_js_repl_internal_tool("js_repl_reset"));
     assert!(!is_js_repl_internal_tool("shell_command"));
     assert!(!is_js_repl_internal_tool("list_mcp_resources"));
+}
+
+#[test]
+fn browser_action_name_normalizes_supported_tool_names() {
+    let req = RunToolRequest {
+        id: "call-1".to_string(),
+        exec_id: "exec-1".to_string(),
+        tool_name: "browser.click".to_string(),
+        arguments: "{}".to_string(),
+    };
+    let call = crate::tools::router::ToolCall {
+        tool_name: ToolName::plain("browser_navigate"),
+        call_id: req.id.clone(),
+        payload: crate::tools::context::ToolPayload::Function {
+            arguments: req.arguments.clone(),
+        },
+    };
+    assert_eq!(
+        browser_action_name(&req, &call),
+        Some("navigate".to_string())
+    );
+
+    let call = crate::tools::router::ToolCall {
+        tool_name: ToolName::plain("mcp__browser__browser_screenshot"),
+        call_id: req.id.clone(),
+        payload: crate::tools::context::ToolPayload::Mcp {
+            server: "browser".to_string(),
+            tool: "browser_screenshot".to_string(),
+            raw_arguments: req.arguments.clone(),
+        },
+    };
+    assert_eq!(
+        browser_action_name(&req, &call),
+        Some("screenshot".to_string())
+    );
+
+    let call = crate::tools::router::ToolCall {
+        tool_name: ToolName::namespaced("browser/", "click"),
+        call_id: req.id.clone(),
+        payload: crate::tools::context::ToolPayload::Function {
+            arguments: req.arguments.clone(),
+        },
+    };
+    assert_eq!(browser_action_name(&req, &call), Some("click".to_string()));
+}
+
+#[tokio::test]
+async fn js_repl_tool_call_span_records_browser_action_fields() {
+    let buffer: &'static std::sync::Mutex<Vec<u8>> =
+        Box::leak(Box::new(std::sync::Mutex::new(Vec::new())));
+    let subscriber = tracing_subscriber::fmt()
+        .with_level(true)
+        .with_ansi(false)
+        .with_max_level(Level::TRACE)
+        .with_span_events(FmtSpan::FULL)
+        .with_writer(MockWriter::new(buffer))
+        .finish();
+
+    let (session, turn_context) = make_session_and_context().await;
+    let req = RunToolRequest {
+        id: "exec-1-tool-0".to_string(),
+        exec_id: "exec-1".to_string(),
+        tool_name: "browser_navigate".to_string(),
+        arguments: "{}".to_string(),
+    };
+    let call = crate::tools::router::ToolCall {
+        tool_name: ToolName::plain("browser_navigate"),
+        call_id: req.id.clone(),
+        payload: crate::tools::context::ToolPayload::Mcp {
+            server: "browser".to_string(),
+            tool: "browser_navigate".to_string(),
+            raw_arguments: req.arguments.clone(),
+        },
+    };
+
+    let dispatch = tracing::Dispatch::new(subscriber);
+    tracing::dispatcher::with_default(&dispatch, || {
+        let span = js_repl_tool_call_span(&session, &turn_context, &req, &call);
+        let _guard = span.enter();
+    });
+
+    let logs = String::from_utf8(buffer.lock().expect("buffer lock").clone()).expect("utf8 logs");
+    assert!(
+        logs.contains("js_repl.tool.call{otel.kind=\"internal\"")
+            && logs.contains("tool.source=\"js_repl\"")
+            && logs.contains("tool.name=\"browser_navigate\"")
+            && logs.contains("tool.requested_name=\"browser_navigate\"")
+            && logs.contains("tool.call_id=\"exec-1-tool-0\"")
+            && logs.contains("tool.payload.kind=\"mcp\"")
+            && logs.contains("js_repl.exec_id=\"exec-1\"")
+            && logs.contains("browser.action=\"navigate\"")
+            && logs.contains("mcp.server.name=\"browser\"")
+            && logs.contains("mcp.tool.name=\"browser_navigate\"")
+            && logs.contains("conversation.id=")
+            && logs.contains("session.id=")
+            && logs.contains("turn.id="),
+        "missing js_repl tool call span fields\nlogs:\n{logs}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

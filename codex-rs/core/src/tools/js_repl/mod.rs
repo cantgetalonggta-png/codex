@@ -27,6 +27,8 @@ use tokio::sync::Mutex;
 use tokio::sync::Notify;
 use tokio::sync::OnceCell;
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
+use tracing::Span;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
@@ -1676,6 +1678,7 @@ impl JsReplManager {
             call_id: req.id.clone(),
             payload,
         };
+        let span = js_repl_tool_call_span(&exec.session, &exec.turn, &req, &call);
 
         let session = Arc::clone(&exec.session);
         let turn = Arc::clone(&exec.turn);
@@ -1691,6 +1694,7 @@ impl JsReplManager {
                 call,
                 crate::tools::router::ToolCallSource::JsRepl,
             )
+            .instrument(span)
             .await
         {
             Ok(result) => {
@@ -1836,6 +1840,78 @@ fn split_exec_result_content_items(
 
 fn is_js_repl_internal_tool(name: &str) -> bool {
     matches!(name, "js_repl" | "js_repl_reset")
+}
+
+fn js_repl_tool_call_span(
+    session: &Session,
+    turn: &TurnContext,
+    req: &RunToolRequest,
+    call: &crate::tools::router::ToolCall,
+) -> Span {
+    let resolved_tool_name = call.tool_name.display();
+    let payload_kind = match &call.payload {
+        crate::tools::context::ToolPayload::Function { .. } => "function",
+        crate::tools::context::ToolPayload::ToolSearch { .. } => "tool_search",
+        crate::tools::context::ToolPayload::Custom { .. } => "custom",
+        crate::tools::context::ToolPayload::LocalShell { .. } => "local_shell",
+        crate::tools::context::ToolPayload::Mcp { .. } => "mcp",
+    };
+    let (mcp_server_name, mcp_tool_name) = match &call.payload {
+        crate::tools::context::ToolPayload::Mcp { server, tool, .. } => {
+            (server.as_str(), tool.as_str())
+        }
+        crate::tools::context::ToolPayload::Function { .. }
+        | crate::tools::context::ToolPayload::ToolSearch { .. }
+        | crate::tools::context::ToolPayload::Custom { .. }
+        | crate::tools::context::ToolPayload::LocalShell { .. } => ("", ""),
+    };
+    let browser_action = browser_action_name(req, call);
+
+    tracing::info_span!(
+        "js_repl.tool.call",
+        otel.kind = "internal",
+        tool.source = "js_repl",
+        tool.name = resolved_tool_name,
+        tool.requested_name = req.tool_name,
+        tool.call_id = req.id,
+        tool.payload.kind = payload_kind,
+        js_repl.exec_id = req.exec_id,
+        browser.action = browser_action.as_deref().unwrap_or(""),
+        mcp.server.name = mcp_server_name,
+        mcp.tool.name = mcp_tool_name,
+        conversation.id = %session.conversation_id,
+        session.id = %session.conversation_id,
+        turn.id = turn.sub_id.as_str(),
+    )
+}
+
+fn browser_action_name(
+    req: &RunToolRequest,
+    call: &crate::tools::router::ToolCall,
+) -> Option<String> {
+    if let Some(action) = browser_action_name_from_parts(
+        call.tool_name.namespace.as_deref(),
+        call.tool_name.name.as_str(),
+    ) {
+        return Some(action);
+    }
+    if let crate::tools::context::ToolPayload::Mcp { tool, .. } = &call.payload
+        && let Some(action) = browser_action_name_from_parts(None, tool)
+    {
+        return Some(action);
+    }
+    browser_action_name_from_parts(None, &req.tool_name)
+}
+
+fn browser_action_name_from_parts(namespace: Option<&str>, name: &str) -> Option<String> {
+    let namespace = namespace.unwrap_or_default();
+    if namespace == "browser" || namespace == "browser/" || namespace == "browser_" {
+        return Some(name.trim_start_matches(['_', '/', '.']).to_string());
+    }
+    name.strip_prefix("browser_")
+        .or_else(|| name.strip_prefix("browser."))
+        .or_else(|| name.strip_prefix("browser/"))
+        .map(str::to_string)
 }
 
 #[derive(Clone, Debug, Deserialize)]
