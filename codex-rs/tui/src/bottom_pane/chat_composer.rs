@@ -2320,16 +2320,11 @@ impl ChatComposer {
         if !self.mentions_v2_enabled {
             return None;
         }
-        Self::current_prefixed_token(&self.textarea, '@', /*allow_empty*/ true).or_else(|| {
-            Self::current_prefixed_token(&self.textarea, '$', /*allow_empty*/ true)
-        })
+        Self::current_prefixed_token(&self.textarea, '@', /*allow_empty*/ true)
     }
 
     fn current_mention_token(&self) -> Option<String> {
         if !self.mentions_enabled() {
-            return None;
-        }
-        if self.mentions_v2_enabled {
             return None;
         }
         Self::current_prefixed_token(&self.textarea, '$', /*allow_empty*/ true)
