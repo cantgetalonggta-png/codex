@@ -192,7 +192,7 @@ fn primary_spans(row: &SearchResult, base_style: Style) -> Vec<Span<'static>> {
     let mut spans = Vec::with_capacity(row.display_name.len());
     let name_style = match row.mention_type {
         MentionType::Plugin | MentionType::App => base_style.magenta(),
-        MentionType::Skill => base_style.dark_gray(),
+        MentionType::Skill => base_style.dim(),
         MentionType::File | MentionType::Directory => base_style,
     };
     if let Some(indices) = row.match_indices.as_ref() {
@@ -239,7 +239,7 @@ fn secondary_line(
 fn path_spans(row: &SearchResult, base_style: Style) -> Vec<Span<'static>> {
     let mut spans = Vec::with_capacity(row.display_name.len());
     let file_name_start = file_name_start(row);
-    let path_style = base_style.dark_gray();
+    let path_style = base_style.dim();
     if file_name_start == 0 {
         spans.push("./".set_style(path_style));
     } else if let Some(indices) = row.match_indices.as_ref() {
